@@ -7,9 +7,6 @@ import pandas as pd
 import yaml
 import os
 
-
-
-
 def calculate_features(seq: str, features: list) -> dict:
     """
     Calculates the features of a peptide sequence.
@@ -41,3 +38,145 @@ def calculate_features(seq: str, features: list) -> dict:
                 #f["isoelectric_point"] = peptide.isoelectric_point(pKscale="EMBOSS")
 
     return f
+
+
+#to find best target seq
+def generate_random_sequence(length=8, aa_singleletter_code="ACDEFGHIKLMNPQRSTVWY"):
+    """
+    Generates a random peptide sequence of given length using amino acid codes.
+
+    Parameters
+    ----------
+    length (int): Length of the peptide sequence.
+    aa_singleletter_code (str): Amino acid codes.
+
+    Returns
+    -------
+    str: Random peptide sequence.
+    """
+    return ''.join(random.choice(aa_singleletter_code) for _ in range(length))
+
+def find_best_target_seq(lib_size: int, features: list[str]):
+    best_boman_index = -float('inf')  # Initialize with negative infinity
+    best_instability_index = float('inf')  # Initialize with positive infinity
+    best_target_seq = ""
+
+    for _ in range(lib_size):
+        target_seq = generate_random_sequence()
+        features_dict = calculate_features(target_seq, features)
+
+        # Extract Boman Index and Instability Index from calculated features
+        current_boman_index = features_dict.get("boman_index", -float('inf'))
+        current_instability_index = features_dict.get("instability_index", float('inf'))
+
+        if current_boman_index > best_boman_index and current_instability_index < best_instability_index:
+            best_boman_index = current_boman_index
+            best_instability_index = current_instability_index
+            best_target_seq = target_seq
+
+    return best_target_seq
+
+def create_nd_data(target_seq: str, lib_size: int, score_bins: int, features: list[str], output_dir: str):
+    """
+    Creates a synthetic peptide sequence-function library for basic testing and
+    model development.
+
+    Parameters
+    ----------
+    target_seq (str): Target peptide sequence.
+    lib_size (int): Degeneracy of the library.
+    score_bins (int): Number of bins to use for scoring.
+    features (list):
+    output_dir (str): Name of output directory to save output files.
+
+    Returns
+    -------
+    None
+
+    Saves sequence data and physio-chemical features (i.e. instability index, etc.)
+    in csv file.
+
+    Target scores are saved in numpy format.
+    """
+
+    fitness_scores = np.zeros((lib_size, score_bins))
+    fitness_score_weights = np.linspace(1, -1, score_bins)
+
+    seqs = [target_seq] * lib_size
+
+    initialize_feature_matrics = lambda n: [np.zeros((lib_size), dtype=object) for _ in range(n)]
+    n_features = len(features)
+    feature_matrices = dict(zip(features, initialize_feature_matrics(n_features)))
+
+    for i in range(0, lib_size):
+        if i == 0:
+            fitness_scores[i] = np.linspace(0, 1, score_bins)
+        else:
+            seq_to_mutate = seqs[i-1]
+            aa_idx = random.randint(0, len(seq_to_mutate) - 1)
+            initial_aa = seq_to_mutate[aa_idx]
+            aa_singleletter_code = "ACDEFGHIKLMNPQRSTVWY"
+            mutant_aa = random.choice(aa_singleletter_code.replace(initial_aa, ''))
+            mutant_seq = seq_to_mutate[:aa_idx] + mutant_aa + seq_to_mutate[aa_idx+1:]
+            seqs[i] = mutant_seq
+
+            delta = np.random.random(score_bins)
+            mutant_score = fitness_scores[0] + (np.multiply(delta, fitness_score_weights) * i)
+            fitness_scores[i] = mutant_score
+
+            # # Calculate aa-similarity-based adjustment factor. Decreased fitness score with less similar AAs
+            # similarity_factor = similarity_matrix[initial_aa][mutant_aa]
+
+            # mutant_score = fitness_scores[0] + (np.multiply(delta, fitness_score_weights) * i * similarity_factor)
+            # fitness_scores[i] = mutant_score
+
+        mutant_features = calculate_features(seqs[i], features)
+        for feature in features:
+            feature_matrices[feature][i] = mutant_features[feature]
+
+    fitness_scores_scaled = (fitness_scores - fitness_scores.min(axis=0)) / (fitness_scores.max(axis=0) - fitness_scores.min(axis=0))
+
+    # Create output_data
+    output_data = pd.DataFrame({"Sequence": seqs,
+                                "Fitness Score": fitness_scores_scaled[:, 0],
+                                "Boman Index": feature_matrices["boman_index"],
+                                "Instability Index": feature_matrices["instability_index"]})
+    return output_data
+
+def filter_peptides(data, boman_threshold=2.48, instability_threshold=40):
+    """
+    Filter peptides based on Boman Index and Instability Index thresholds.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing peptide data including Boman Index and Instability Index.
+    boman_threshold : float, optional
+        Threshold for Boman Index, peptides with values greater than this will be retained.
+    instability_threshold : float, optional
+        Threshold for Instability Index, peptides with values less than this will be retained.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered DataFrame containing only peptides that meet the specified criteria.
+    """
+    filtered_data = data[(data["Boman Index"] > boman_threshold) & (data["Instability Index"] < instability_threshold)]
+    return filtered_data
+
+
+best_target_sequence = find_best_target_seq(100000, ["boman_index", "instability_index"])
+output_data = create_nd_data(best_target_sequence, 10000, 2, ["boman_index", "instability_index"], "/content/drive/MyDrive")
+filtered_output = filter_peptides(output_data)
+
+# Save filtered_output to a CSV file in your Google Drive
+output_file_path = os.path.join("/content/drive/MyDrive/SzablowskiLab/fitness_landscape", "filtered_output.csv")
+filtered_output.to_csv(output_file_path, index=False)
+
+filtered_seqs = pd.read_csv("/content/drive/MyDrive/SzablowskiLab/fitness_landscape/filtered_output.csv")
+
+with open("/content/drive/MyDrive/SzablowskiLab/fitness_landscape/filtered_seqs.fa", "w+") as fasta:
+    for seq_id, seq in enumerate(filtered_seqs["Sequence"]):
+        fasta.write(f">seq_{seq_id}\n")
+        fasta.write(f"{seq}\n")
+
