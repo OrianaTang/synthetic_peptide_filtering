@@ -165,18 +165,11 @@ def filter_peptides(data, boman_threshold=2.48, instability_threshold=40):
     return filtered_data
 
 
-best_target_sequence = find_best_target_seq(100000, ["boman_index", "instability_index"])
-output_data = create_nd_data(best_target_sequence, 10000, 2, ["boman_index", "instability_index"], "/content/drive/MyDrive")
-filtered_output = filter_peptides(output_data)
+def main():
+  best_target_sequence = find_best_target_seq(100000, ["boman_index", "instability_index"])
+  filtered_output = filter_peptides(create_nd_data(best_target_sequence, 10000, 2, ["boman_index", "instability_index"], "/content/drive/MyDrive/SzablowskiLab/fitness_landscape"))
+  output_file_path = os.path.join("/content/drive/MyDrive/SzablowskiLab/fitness_landscape", "filtered_output.csv")
+  filtered_output.to_csv(output_file_path, index=False)
 
-# Save filtered_output to a CSV file in your Google Drive
-output_file_path = os.path.join("/content/drive/MyDrive/SzablowskiLab/fitness_landscape", "filtered_output.csv")
-filtered_output.to_csv(output_file_path, index=False)
-
-filtered_seqs = pd.read_csv("/content/drive/MyDrive/SzablowskiLab/fitness_landscape/filtered_output.csv")
-
-with open("/content/drive/MyDrive/SzablowskiLab/fitness_landscape/filtered_seqs.fa", "w+") as fasta:
-    for seq_id, seq in enumerate(filtered_seqs["Sequence"]):
-        fasta.write(f">seq_{seq_id}\n")
-        fasta.write(f"{seq}\n")
-
+if __name__ == "__main__":
+    main()
