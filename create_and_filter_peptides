@@ -1,0 +1,43 @@
+# from dataset_generator.py in github
+!pip install -r "/content/drive/MyDrive/requirements.txt"
+import random
+import peptides as pep
+import numpy as np
+import pandas as pd
+import yaml
+import os
+
+
+
+
+def calculate_features(seq: str, features: list) -> dict:
+    """
+    Calculates the features of a peptide sequence.
+
+    Parameters
+    ----------
+    seq (str): Peptide sequence.
+    features (list): List of features to calculate (must be compatible with Peptides API -- link here)
+
+    Returns
+    -------
+    f (dict): Dictionary of features.
+    """
+
+    f = {}
+
+    peptide = pep.Peptide(seq)
+    for feature in features:
+        match feature:
+            case "boman_index":
+                f["boman_index"] = peptide.boman()
+            #case "cruciani_properties":
+                #f["cruciani_properties"] = peptide.cruciani_properties()
+            #case "fasgai_vectors":
+                #f["fasgai_vectors"] = peptide.fasgai_vectors()
+            case "instability_index":
+                f["instability_index"] = peptide.instability_index()
+            #case "isoelectric_point":
+                #f["isoelectric_point"] = peptide.isoelectric_point(pKscale="EMBOSS")
+
+    return f
